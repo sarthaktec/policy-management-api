@@ -2,6 +2,7 @@ const express = require("express");
 const multer = require("multer");
 const path = require("path");
 const { Worker } = require("worker_threads");
+const { importPolicies } = require("../services/import.service");
 
 const router = express.Router();
 
@@ -28,7 +29,7 @@ router.post("/", upload.single("file"), (req, res) => {
     }
   );
 
-  worker.on("message", (result) => {
+  worker.on("message", async (result) => {
     if (!result.success) {
       return res.status(500).json({
         success: false,
@@ -36,11 +37,14 @@ router.post("/", upload.single("file"), (req, res) => {
       });
     }
 
+    const importResult = await importPolicies(result.rows);
+
     return res.status(200).json({
       success: true,
       message: "CSV processed successfully",
       totalRows: result.totalRows,
       sample: result.rows.slice(0, 2),
+      imported: importResult,
     });
   });
 

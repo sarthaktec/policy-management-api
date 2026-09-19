@@ -5,6 +5,7 @@ const policySchema = new mongoose.Schema(
     policyNumber: {
       type: String,
       required: true,
+      unique: true,
       trim: true,
     },
 
