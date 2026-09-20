@@ -5,6 +5,14 @@ const LOB = require("../models/LOB");
 const Carrier = require("../models/Carrier");
 const Policy = require("../models/Policy");
 
+const toString = (value) => {
+  if (value === undefined || value === null) {
+    return "";
+  }
+
+  return String(value).trim();
+};
+
 const importPolicies = async (rows) => {
   const agents = new Map();
   const users = new Map();
@@ -13,73 +21,58 @@ const importPolicies = async (rows) => {
   const carriers = new Map();
 
   // ========================================
-  // 1. Prepare unique data from CSV
+  // 1. Prepare unique data from CSV / XLSX
   // ========================================
 
   for (const row of rows) {
-    // -------------------------
     // Agent
-    // -------------------------
+    const agentName = toString(row.agent);
 
-    if (row.agent?.trim()) {
-      const name = row.agent.trim();
-
-      agents.set(name, {
-        name,
+    if (agentName) {
+      agents.set(agentName, {
+        name: agentName,
       });
     }
 
-    // -------------------------
     // User
-    // -------------------------
+    const email = toString(row.email).toLowerCase();
 
-    if (row.email?.trim()) {
-      const email = row.email.trim().toLowerCase();
-
+    if (email) {
       users.set(email, {
-        firstName: row.firstname?.trim(),
+        firstName: toString(row.firstname),
         dob: row.dob || null,
-        address: row.address?.trim(),
-        phone: row.phone?.trim(),
-        state: row.state?.trim(),
-        zip: row.zip?.trim(),
+        address: toString(row.address),
+        phone: toString(row.phone),
+        state: toString(row.state),
+        zip: toString(row.zip),
         email,
-        gender: row.gender?.trim(),
-        userType: row.userType?.trim(),
+        gender: toString(row.gender),
+        userType: toString(row.userType),
       });
     }
 
-    // -------------------------
     // Account
-    // -------------------------
+    const accountName = toString(row.account_name);
 
-    if (row.account_name?.trim()) {
-      const accountName = row.account_name.trim();
-
+    if (accountName) {
       accounts.set(accountName, {
         accountName,
       });
     }
 
-    // -------------------------
     // LOB
-    // -------------------------
+    const categoryName = toString(row.category_name);
 
-    if (row.category_name?.trim()) {
-      const categoryName = row.category_name.trim();
-
+    if (categoryName) {
       lobs.set(categoryName, {
         categoryName,
       });
     }
 
-    // -------------------------
     // Carrier
-    // -------------------------
+    const companyName = toString(row.company_name);
 
-    if (row.company_name?.trim()) {
-      const companyName = row.company_name.trim();
-
+    if (companyName) {
       carriers.set(companyName, {
         companyName,
       });
@@ -87,90 +80,70 @@ const importPolicies = async (rows) => {
   }
 
   // ========================================
-  // 2. Insert / Update Agents
+  // 2. Insert / update Agents
   // ========================================
 
   await Agent.bulkWrite(
     [...agents.values()].map((agent) => ({
       updateOne: {
-        filter: {
-          name: agent.name,
-        },
-        update: {
-          $set: agent,
-        },
+        filter: { name: agent.name },
+        update: { $set: agent },
         upsert: true,
       },
     }))
   );
 
   // ========================================
-  // 3. Insert / Update Users
+  // 3. Insert / update Users
   // ========================================
 
   await User.bulkWrite(
     [...users.values()].map((user) => ({
       updateOne: {
-        filter: {
-          email: user.email,
-        },
-        update: {
-          $set: user,
-        },
+        filter: { email: user.email },
+        update: { $set: user },
         upsert: true,
       },
     }))
   );
 
   // ========================================
-  // 4. Insert / Update Accounts
+  // 4. Insert / update Accounts
   // ========================================
 
   await UserAccount.bulkWrite(
     [...accounts.values()].map((account) => ({
       updateOne: {
-        filter: {
-          accountName: account.accountName,
-        },
-        update: {
-          $set: account,
-        },
+        filter: { accountName: account.accountName },
+        update: { $set: account },
         upsert: true,
       },
     }))
   );
 
   // ========================================
-  // 5. Insert / Update LOBs
+  // 5. Insert / update LOBs
   // ========================================
 
   await LOB.bulkWrite(
     [...lobs.values()].map((lob) => ({
       updateOne: {
-        filter: {
-          categoryName: lob.categoryName,
-        },
-        update: {
-          $set: lob,
-        },
+        filter: { categoryName: lob.categoryName },
+        update: { $set: lob },
         upsert: true,
       },
     }))
   );
 
   // ========================================
-  // 6. Insert / Update Carriers
+  // 6. Insert / update Carriers
   // ========================================
 
   await Carrier.bulkWrite(
     [...carriers.values()].map((carrier) => ({
       updateOne: {
-        filter: {
-          companyName: carrier.companyName,
-        },
-        update: {
-          $set: carrier,
-        },
+        filter: { companyName: carrier.companyName },
+        update: { $set: carrier },
         upsert: true,
       },
     }))
@@ -216,10 +189,6 @@ const importPolicies = async (rows) => {
     }
   ).lean();
 
-  // ========================================
-  // 8. Create lookup Maps
-  // ========================================
-
   const userMap = new Map(
     userDocs.map((user) => [
       user.email,
@@ -242,47 +211,47 @@ const importPolicies = async (rows) => {
   );
 
   // ========================================
-  // 9. Prepare Policies
+  // 8. Prepare Policies
   // ========================================
 
   const policies = rows
     .map((row) => {
-      const email = row.email?.trim().toLowerCase();
-      const categoryName = row.category_name?.trim();
-      const companyName = row.company_name?.trim();
+      const email = toString(row.email).toLowerCase();
+      const categoryName = toString(row.category_name);
+      const companyName = toString(row.company_name);
+      const policyNumber = toString(row.policy_number);
 
       const userId = userMap.get(email);
       const categoryId = lobMap.get(categoryName);
       const companyId = carrierMap.get(companyName);
 
-      // Skip invalid rows
       if (
         !userId ||
         !categoryId ||
         !companyId ||
-        !row.policy_number?.trim()
+        !policyNumber
       ) {
         return null;
       }
 
       return {
-        policyNumber: row.policy_number.trim(),
+        policyNumber,
 
-        policyStartDate: row.policy_start_date || null,
+        policyStartDate:
+          row.policy_start_date || null,
 
-        policyEndDate: row.policy_end_date || null,
+        policyEndDate:
+          row.policy_end_date || null,
 
         categoryId,
-
         companyId,
-
         userId,
       };
     })
     .filter(Boolean);
 
   // ========================================
-  // 10. Insert / Update Policies
+  // 9. Insert / update Policies
   // ========================================
 
   await Policy.bulkWrite(
@@ -298,10 +267,6 @@ const importPolicies = async (rows) => {
       },
     }))
   );
-
-  // ========================================
-  // 11. Return Import Summary
-  // ========================================
 
   return {
     agents: agents.size,
